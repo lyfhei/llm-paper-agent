@@ -1,0 +1,19 @@
+{
+  "paper_id": "2604.09709v1",
+  "title": "Orthogonal Quadratic Complements for Vision Transformer Feed-Forward Networks",
+  "url": "http://arxiv.org/abs/2604.09709v1",
+  "experiment_type": "paper-inspired",
+  "confidence": 0.45,
+  "old_code": "class FeedForward(nn.Module):\n    def __init__(self, config: MiniMindConfig, intermediate_size: int = None):\n        super().__init__()\n        intermediate_size = intermediate_size or config.intermediate_size\n        self.gate_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)\n        self.down_proj = nn.Linear(intermediate_size, config.hidden_size, bias=False)\n        self.up_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)\n        self.act_fn = ACT2FN[config.hidden_act]\n\n    def forward(self, x):\n        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))",
+  "new_code": "class FeedForward(nn.Module):\n    def __init__(self, config: MiniMindConfig, intermediate_size: int = None):\n        super().__init__()\n        intermediate_size = intermediate_size or config.intermediate_size\n        self.gate_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)\n        self.down_proj = nn.Linear(intermediate_size, config.hidden_size, bias=False)\n        self.up_proj = nn.Linear(config.hidden_size, intermediate_size, bias=False)\n        self.act_fn = ACT2FN[config.hidden_act]\n        # OQC-LR: low-rank quadratic auxiliary branch\n        oqc_rank = max(4, config.hidden_size // 64)\n        self.oqc_a = nn.Linear(config.hidden_size, oqc_rank, bias=False)\n        self.oqc_b = nn.Linear(config.hidden_size, oqc_rank, bias=False)\n        self.oqc_proj = nn.Linear(oqc_rank, config.hidden_size, bias=False)\n        nn.init.zeros_(self.oqc_proj.weight)\n\n    def forward(self, x):\n        main = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))\n        # Low-rank quadratic auxiliary: element-wise product in rank-r space\n        aux = self.oqc_proj(self.oqc_a(x) * self.oqc_b(x))\n        # Project aux onto orthogonal complement of main\n        main_norm_sq = (main * main).sum(dim=-1, keepdim=True) + 1e-8\n        aux = aux - (aux * main).sum(dim=-1, keepdim=True) / main_norm_sq * main\n        return main + aux",
+  "change_description": "Implement OQC-LR (Orthogonal Quadratic Complement Low-Rank) in the FeedForward module. A low-rank quadratic auxiliary branch computes element-wise products of two low-rank projections, then projects out the component parallel to the main branch output before adding it, ensuring the auxiliary contributes only orthogonal information.",
+  "claude_reason": "",
+  "baseline_ppl": 124.9129,
+  "variant_ppl": 132.6534,
+  "relative_improvement": -0.061967,
+  "result": "FAIL",
+  "has_nan": false,
+  "training_time_s": 369.6,
+  "interpretation": "The OQC-LR method relies on the orthogonal projection step to ensure the quadratic auxiliary branch contributes only novel, non-redundant information to the main branch output, but this orthogonalization requires the main branch representations to already be rich and well-structured enough that meaningful orthogonal complements exist — in MiniMind's relatively small, undertrained transformer, the main branch outputs may be too noisy or low-rank themselves, causing the projection to discard useful signal rather than redundant information. Additionally, introducing a quadratic interaction term (element-wise products of low-rank projections) adds model complexity and potential optimization difficulties that can destabilize training in compact architectures, outweighing any representational benefit the orthogonal complement was designed to provide.",
+  "timestamp": "2026-05-13T15:11:34"
+}

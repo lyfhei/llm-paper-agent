@@ -1,0 +1,19 @@
+{
+  "paper_id": "2604.24957v1",
+  "title": "Compute Aligned Training: Optimizing for Test Time Inference",
+  "url": "http://arxiv.org/abs/2604.24957v1",
+  "experiment_type": "paper-inspired",
+  "confidence": 0.5,
+  "old_code": "        if labels is not None:\n            x, y = logits[..., :-1, :].contiguous(), labels[..., 1:].contiguous()\n            loss = F.cross_entropy(x.view(-1, x.size(-1)), y.view(-1), ignore_index=-100)",
+  "new_code": "        if labels is not None:\n            x, y = logits[..., :-1, :].contiguous(), labels[..., 1:].contiguous()\n            # Compute-Aligned Training: scale logits by temperature < 1 to align\n            # training objective with best-of-N test-time inference (CAT, 2024)\n            cat_temperature = 0.5\n            loss = F.cross_entropy((x / cat_temperature).view(-1, x.size(-1)), y.view(-1), ignore_index=-100)",
+  "change_description": "",
+  "claude_reason": "",
+  "baseline_ppl": 79.7658,
+  "variant_ppl": 87.6974,
+  "relative_improvement": -0.099436,
+  "result": "FAIL",
+  "has_nan": false,
+  "training_time_s": 750.6,
+  "interpretation": "The paper's core contribution is aligning training compute distribution with test-time inference patterns, meaning the model learns to allocate computational effort in a way that mirrors how it will actually be used during inference. However, MiniMind's extremely small architecture likely lacks the capacity and depth required to benefit from this compute reallocation strategy — the model is too constrained to meaningfully redistribute internal computation, so the modified training objective instead disrupts the basic language modeling signal, leading to worse perplexity.",
+  "timestamp": "2026-05-12T23:22:17"
+}

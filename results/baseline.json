@@ -1,0 +1,7 @@
+{
+  "baseline_ppl": 87.0073,
+  "baseline_val_loss": 4.466,
+  "training_time_s": 558.5,
+  "quick_train_steps": 2000,
+  "timestamp": "2026-05-14T10:42:09"
+}

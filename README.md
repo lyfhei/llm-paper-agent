@@ -1,0 +1,188 @@
+# LLM Paper Agent + MiniMind
+
+An end-to-end agent pipeline that reads recent arXiv papers, uses Claude to generate targeted code patches for [MiniMind](https://github.com/jingyaogong/minimind), trains the patched model, and measures perplexity improvement.
+
+---
+
+## Pipeline Overview
+
+```
+Task 1 — Literature Review
+  arXiv search (4 goals)
+       ↓
+  Claude scores papers (novelty × practicality × applicability)
+       ↓
+  Ranked report saved to results/reports/
+
+Task 2 — Agent Experiment Loop
+  Read top-ranked papers
+       ↓
+  Claude reads paper abstract + model source code
+       ↓
+  Claude outputs { old_code, new_code } patch
+       ↓
+  Validate (exact match + ast.parse) → apply to model_minimind.py
+       ↓
+  Train MiniMind variant (~26M params, 1 epoch, RTX 5070)
+       ↓
+  Evaluate perplexity → compare to frozen baseline
+       ↓
+  PASS if relative improvement > 2%  |  always revert patch
+       ↓
+  Log result + Claude interpretation
+```
+
+---
+
+## Architecture
+
+### Task 1 — Literature Review
+
+- **`task1_literature_review/fetcher.py`** — Queries arXiv across 4 improvement goals: architecture, training efficiency, data quality, training objective. Deduplicates and returns up to 32 papers.
+- **`task1_literature_review/scorer.py`** — Sends each paper to Claude, which scores novelty / practicality / clarity and returns a confidence score (0–1) for applicability to MiniMind.
+- **`task1_literature_review/report.py`** — Saves ranked results as Markdown + JSON.
+
+### Task 2 — Agent Loop
+
+- **`task2_experiment/agent_loop.py`** — Core loop. For each paper above the confidence threshold:
+  1. Calls `claude_generate_patch()`: sends paper abstract + architecturally relevant model source to Claude, receives `{ old_code, new_code, change_description, reason, can_implement }`.
+  2. Validates the patch: `old_code` must be a verbatim substring of `model_minimind.py`, and the result must parse as valid Python (`ast.parse`).
+  3. Applies the patch via `str.replace`, trains the variant, compares PPL to baseline.
+  4. Always reverts to the original model file after each experiment.
+
+- **`task2_experiment/evaluator.py`** — Trains MiniMind from scratch using a cosine-decay schedule. Caches baseline PPL in `results/baseline.json` to avoid re-training.
+- **`task2_experiment/tracker.py`** — Saves per-experiment JSON records and generates a Markdown report.
+- **`task2_experiment/memory.py`** — Persists patch history and per-patch success statistics across runs.
+
+### Model — MiniMind
+
+| Parameter | Value |
+|-----------|-------|
+| Architecture | Decoder-only transformer |
+| Hidden size | 512 |
+| Layers | 8 |
+| Parameters | ~26M |
+| Positional encoding | RoPE (θ = 1e6) |
+| Normalization | RMSNorm (ε = 1e-6) |
+| Feed-forward | SwiGLU |
+| Attention | Grouped Query Attention (8 heads, 4 KV heads) |
+
+### Training Config
+
+| Parameter | Value |
+|-----------|-------|
+| Batch size | 32 (effective 256 with grad accum × 8) |
+| Learning rate | 5e-4 (cosine decay) |
+| Sequence length | 340 |
+| dtype | bfloat16 |
+| GPU | RTX 5070 8GB |
+| Epoch time | ~80 min |
+
+---
+
+## Results
+
+5 experiments run. 1 PASS (>2% relative PPL improvement).
+
+| Paper | Change | Baseline PPL | Variant PPL | Rel. Improvement | Result |
+|-------|--------|-------------|-------------|-----------------|--------|
+| [PolyGLU: State-Conditional Activation Routing](https://arxiv.org/abs/2603.13347) | Replace SwiGLU with PolyGLU (Gumbel-Softmax routing over 4 activations) | 124.91 | 119.90 | **+4.0%** | ✅ PASS |
+| [Orthogonal Quadratic Complements for ViT FFN](https://arxiv.org/abs/2604.09709) | OQC-LR low-rank quadratic complement in FeedForward | 124.91 | 132.65 | -6.2% | ❌ FAIL |
+| [Compute Aligned Training](https://arxiv.org/abs/2604.24957) | Modified training objective | 124.91 | 137.23 | -9.9% | ❌ FAIL |
+| [Graph Memory Transformer](https://arxiv.org/abs/2604.23862) | Graph-based memory attention | 124.91 | 152.52 | -22.1% | ❌ FAIL |
+| [Online Reweighting for LLM Training](https://arxiv.org/abs/2605.05227) | ADAPT-style per-sample loss reweighting | 124.91 | 21,937 | -175× | ❌ FAIL |
+
+### PolyGLU (PASS)
+
+PolyGLU replaces MiniMind's fixed SwiGLU gate with a learnable mixture of 4 activation functions (SiLU, GELU, ReLU, Tanh), using Gumbel-Softmax routing during training:
+
+```python
+# Before (SwiGLU)
+def forward(self, x):
+    return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
+# After (PolyGLU)
+def forward(self, x):
+    gate = self.gate_proj(x)
+    route_logits = self._polyglu_static + self._polyglu_router(x)
+    weights = F.softmax((route_logits + gumbel_noise), dim=-1)  # during training
+    acts = self._polyglu_activations(gate)  # [SiLU, GELU, ReLU, Tanh]
+    mixed_act = (acts * weights.unsqueeze(-2)).sum(dim=-1)
+    return self.down_proj(mixed_act * self.up_proj(x))
+```
+
+> "PolyGLU's mixture of activation functions allows the network to adaptively select the most appropriate non-linearity for different input contexts, rather than being constrained to SwiGLU's fixed inductive bias."
+
+### Loss Curves
+
+**Baseline**
+
+![Baseline training loss](results/plots/baseline.png)
+
+**PolyGLU variant (PASS)**
+
+![PolyGLU variant loss](results/plots/2603.13347v1_variant.png)
+
+---
+
+## Usage
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set API key
+echo "ANTHROPIC_API_KEY=your_key_here" > .env
+
+# Download MiniMind dataset (not included — ~1.2GB)
+# Place pretrain_t2t_mini.jsonl at minimind/dataset/pretrain_t2t_mini.jsonl
+
+# Task 1: fetch and score papers
+python main.py task1
+
+# Task 2: run agent experiment loop (real training, ~80 min/experiment)
+python main.py task2
+
+# Task 2 with mock evaluator (no training, for testing)
+python main.py task2 --mock
+
+# View experiment summary
+python main.py summary
+```
+
+---
+
+## File Structure
+
+```
+├── config.py                      # Global constants (paths, model, training params)
+├── main.py                        # CLI entry point
+├── requirements.txt
+├── task1_literature_review/
+│   ├── fetcher.py                 # arXiv search across 4 improvement goals
+│   ├── scorer.py                  # Claude scoring (novelty / practicality / confidence)
+│   ├── report.py                  # Markdown report generation
+│   └── agent.py                   # Orchestrates task1
+├── task2_experiment/
+│   ├── agent_loop.py              # Core agent: Claude patch generation + eval loop
+│   ├── evaluator.py               # MiniMind training + PPL evaluation
+│   ├── tracker.py                 # Experiment JSON records + reports
+│   └── memory.py                  # Cross-run patch success statistics
+├── minimind/                      # MiniMind source (third-party, read-only)
+│   ├── model/model_minimind.py    # Patched by the agent during experiments
+│   └── model/tokenizer.json
+└── results/
+    ├── baseline.json              # Cached baseline PPL
+    ├── agent_memory.json          # Patch history
+    ├── reports/                   # Task 1 paper reports
+    ├── experiments/               # Per-experiment JSON records
+    └── plots/                     # Training loss curves (PNG)
+```
+
+---
+
+## Notes
+
+- Model weights (`results/models/`) and training data (`minimind/dataset/*.jsonl`) are excluded from the repo due to size.
+- The agent always reverts `model_minimind.py` after each experiment, so the source file in this repo is the unmodified baseline.
+- Baseline PPL is cached; delete `results/baseline.json` to force re-training.

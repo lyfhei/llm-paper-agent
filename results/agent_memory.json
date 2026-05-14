@@ -1,0 +1,101 @@
+{
+  "patch_history": [
+    {
+      "patch_id": "claude",
+      "paper_id": "2603.13347v1",
+      "paper_title": "PolyGLU: State-Conditional Activation Routing in Transformer Feed-Forward Networks",
+      "result": "FAIL",
+      "relative_improvement": -0.011965,
+      "future_candidate": false,
+      "timestamp": "2026-05-12T21:32:30"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2604.23862v1",
+      "paper_title": "Graph Memory Transformer (GMT)",
+      "result": "FAIL",
+      "relative_improvement": -0.220603,
+      "future_candidate": false,
+      "timestamp": "2026-05-12T21:46:11"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2604.09709v1",
+      "paper_title": "Orthogonal Quadratic Complements for Vision Transformer Feed-Forward Networks",
+      "result": "FAIL",
+      "relative_improvement": -0.035509,
+      "future_candidate": false,
+      "timestamp": "2026-05-12T21:58:53"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2603.13347v1",
+      "paper_title": "PolyGLU: State-Conditional Activation Routing in Transformer Feed-Forward Networks",
+      "result": "FAIL",
+      "relative_improvement": -0.037551,
+      "future_candidate": false,
+      "timestamp": "2026-05-12T23:06:13"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2604.24957v1",
+      "paper_title": "Compute Aligned Training: Optimizing for Test Time Inference",
+      "result": "FAIL",
+      "relative_improvement": -0.099436,
+      "future_candidate": false,
+      "timestamp": "2026-05-12T23:22:17"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2604.23862v1",
+      "paper_title": "Graph Memory Transformer (GMT)",
+      "result": "FAIL",
+      "relative_improvement": -0.221215,
+      "future_candidate": false,
+      "timestamp": "2026-05-12T23:35:22"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2603.13347v1",
+      "paper_title": "PolyGLU: State-Conditional Activation Routing in Transformer Feed-Forward Networks",
+      "result": "FAIL",
+      "relative_improvement": -0.010404,
+      "future_candidate": false,
+      "timestamp": "2026-05-13T10:21:19"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2603.13347v1",
+      "paper_title": "PolyGLU: State-Conditional Activation Routing in Transformer Feed-Forward Networks",
+      "result": "PASS",
+      "relative_improvement": 0.040095,
+      "future_candidate": false,
+      "timestamp": "2026-05-13T14:52:33"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2605.05227v1",
+      "paper_title": "Rethinking Data Curation in LLM Training: Online Reweighting Offers Better Generalization than Offline Methods",
+      "result": "FAIL",
+      "relative_improvement": -175.334596,
+      "future_candidate": false,
+      "timestamp": "2026-05-13T15:04:19"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2604.09709v1",
+      "paper_title": "Orthogonal Quadratic Complements for Vision Transformer Feed-Forward Networks",
+      "result": "FAIL",
+      "relative_improvement": -0.061967,
+      "future_candidate": false,
+      "timestamp": "2026-05-13T15:11:34"
+    }
+  ],
+  "patch_stats": {
+    "claude": {
+      "attempts": 10,
+      "passes": 1,
+      "avg_relative_improvement": -17.5993
+    }
+  }
+}

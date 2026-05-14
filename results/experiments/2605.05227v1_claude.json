@@ -1,0 +1,19 @@
+{
+  "paper_id": "2605.05227v1",
+  "title": "Rethinking Data Curation in LLM Training: Online Reweighting Offers Better Generalization than Offline Methods",
+  "url": "http://arxiv.org/abs/2605.05227v1",
+  "experiment_type": "paper-inspired",
+  "confidence": 0.6,
+  "old_code": "        if labels is not None:\n            x, y = logits[..., :-1, :].contiguous(), labels[..., 1:].contiguous()\n            loss = F.cross_entropy(x.view(-1, x.size(-1)), y.view(-1), ignore_index=-100)",
+  "new_code": "        if labels is not None:\n            x, y = logits[..., :-1, :].contiguous(), labels[..., 1:].contiguous()\n            per_token_loss = F.cross_entropy(x.view(-1, x.size(-1)), y.view(-1), ignore_index=-100, reduction='none')\n            mask = (y.view(-1) != -100).float()\n            num_valid = mask.sum().clamp(min=1)\n            per_token_loss_masked = per_token_loss * mask\n            batch_size = x.size(0)\n            per_sample_loss = per_token_loss_masked.view(batch_size, -1).sum(dim=-1) / mask.view(batch_size, -1).sum(dim=-1).clamp(min=1)\n            mean_loss = per_sample_loss.mean().detach()\n            std_loss = per_sample_loss.std().detach().clamp(min=1e-6)\n            weights = torch.exp(-0.5 * ((per_sample_loss.detach() - mean_loss) / std_loss) ** 2)\n            weights = weights / weights.sum().clamp(min=1e-6) * batch_size\n            weighted_loss = (per_sample_loss * weights).mean()\n            loss = weighted_loss",
+  "change_description": "Implement a simplified ADAPT-style online per-sample loss reweighting in the forward pass. Instead of plain cross-entropy mean, compute per-sample losses and reweight them based on their similarity to the batch mean loss (samples near the mean get higher weight, extreme outliers get lower weight). This approximates ADAPT's adaptive data reweighting without changing sample counts.",
+  "claude_reason": "",
+  "baseline_ppl": 124.9129,
+  "variant_ppl": 22026.4658,
+  "relative_improvement": -175.334596,
+  "result": "FAIL",
+  "has_nan": false,
+  "training_time_s": 322.3,
+  "interpretation": "The paper's contribution is specifically about **online reweighting across data sources/domains** at the dataset level, not per-sample loss reweighting within a batch — applying a Gaussian-style similarity weighting that penalizes both low and high loss samples destabilizes training by suppressing informative gradient signals from harder examples while also downweighting easy ones, leaving no clear learning signal. In MiniMind's small-scale architecture with limited capacity, this intra-batch reweighting scheme is particularly destructive because the \"mean loss\" reference point shifts chaotically each batch, creating inconsistent gradient magnitudes that cause catastrophic divergence rather than the stable domain-level curriculum ADAPT was designed to provide.",
+  "timestamp": "2026-05-13T15:04:19"
+}
