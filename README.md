@@ -114,13 +114,13 @@ def forward(self, x):
 
 ### Loss Curves
 
-**Baseline**
-
-![Baseline training loss](results/plots/baseline.png)
-
 **PolyGLU variant (PASS)**
 
-![PolyGLU variant loss](results/plots/2603.13347v1_variant.png)
+![PolyGLU variant loss](results/plots/polyglu_variant.png)
+
+**Baseline**
+
+![Baseline training loss](results/plots/baseline_v2.png)
 
 ---
 
