@@ -42,21 +42,26 @@ Task 2 — Agent Experiment Loop
 
 ### Task 1 — Literature Review
 
-- **`task1_literature_review/fetcher.py`** — Queries arXiv across 4 improvement goals: architecture, training efficiency, data quality, training objective. Deduplicates and returns up to 32 papers.
-- **`task1_literature_review/scorer.py`** — Sends each paper to Claude, which scores novelty / practicality / clarity and returns a confidence score (0–1) for applicability to MiniMind.
+- **`task1_literature_review/fetcher.py`** — Queries arXiv across 4 improvement goals (architecture, training efficiency, data quality, training objective), deduplicates and returns up to 32 papers.
+- **`task1_literature_review/scorer.py`** — Injects past experiment history (`build_context_for_scoring()`) into each scoring prompt so Claude calibrates confidence based on which technique categories have succeeded or failed; scores novelty / practicality / clarity and returns a confidence score (0–1).
 - **`task1_literature_review/report.py`** — Saves ranked results as Markdown + JSON.
 
 ### Task 2 — Agent Loop
 
 - **`task2_experiment/agent_loop.py`** — Core loop. For each paper above the confidence threshold:
-  1. Calls `claude_generate_patch()`: sends paper abstract + architecturally relevant model source to Claude, receives `{ old_code, new_code, change_description, reason, can_implement }`.
-  2. Validates the patch: `old_code` must be a verbatim substring of `model_minimind.py`, and the result must parse as valid Python (`ast.parse`).
-  3. Applies the patch via `str.replace`, trains the variant, compares PPL to baseline.
-  4. Always reverts to the original model file after each experiment.
+  1. Calls `claude_generate_patch()`: prepends memory context (`build_context_for_patch()` — technique-level pass rates, recent failure lessons, synthesis) to the prompt, then sends paper abstract + model source to Claude, receives `{ old_code, new_code, change_description, reason, can_implement }`.
+  2. Validates the patch: `old_code` must be a verbatim substring of `model_minimind.py`, and the patched file must parse as valid Python (`ast.parse`).
+  3. Applies patch via `str.replace`, trains variant, compares PPL to baseline; always reverts model file after each experiment.
+  4. On FAIL: calls `claude_analyze_failure()` for structured post-mortem (`what_failed`, `root_cause`, `avoid_pattern`, `transferable_lesson`), stores result in memory.
+  5. After all experiments: calls `claude_generate_memory_summary()` to synthesize findings into a strategic summary for the next run.
 
-- **`task2_experiment/evaluator.py`** — Trains MiniMind from scratch using a cosine-decay schedule. Caches baseline PPL in `results/baseline.json` to avoid re-training.
-- **`task2_experiment/tracker.py`** — Saves per-experiment JSON records and generates a Markdown report.
-- **`task2_experiment/memory.py`** — Persists patch history and per-patch success statistics across runs.
+- **`task2_experiment/evaluator.py`** — Trains MiniMind from scratch with cosine-decay LR schedule; caches baseline PPL in `results/baseline.json`.
+- **`task2_experiment/tracker.py`** — Saves per-experiment JSON records and generates a Markdown summary report.
+- **`task2_experiment/memory.py`** — Active memory system with three layers:
+  - `technique_registry` — per-category pass/fail statistics updated after every experiment
+  - `failure_analyses` — structured post-mortem entries from `claude_analyze_failure()`
+  - `memory_summary` — Claude-generated strategic synthesis regenerated each run
+  - `build_context_for_patch()` / `build_context_for_scoring()` — format memory into prompt-ready context blocks
 
 ### Model — MiniMind
 
@@ -163,20 +168,21 @@ python main.py summary
 ├── requirements.txt
 ├── task1_literature_review/
 │   ├── fetcher.py                 # arXiv search across 4 improvement goals
-│   ├── scorer.py                  # Claude scoring (novelty / practicality / confidence)
+│   ├── scorer.py                  # Claude scoring with memory-calibrated confidence
 │   ├── report.py                  # Markdown report generation
 │   └── agent.py                   # Orchestrates task1
 ├── task2_experiment/
-│   ├── agent_loop.py              # Core agent: Claude patch generation + eval loop
+│   ├── agent_loop.py              # Core loop: memory injection → patch → train → post-mortem
 │   ├── evaluator.py               # MiniMind training + PPL evaluation
 │   ├── tracker.py                 # Experiment JSON records + reports
-│   └── memory.py                  # Cross-run patch success statistics
+│   └── memory.py                  # Active memory: technique_registry, failure_analyses,
+│                                  # memory_summary, build_context_for_patch/scoring
 ├── minimind/                      # MiniMind source (third-party, read-only)
 │   ├── model/model_minimind.py    # Patched by the agent during experiments
 │   └── model/tokenizer.json
 └── results/
     ├── baseline.json              # Cached baseline PPL
-    ├── agent_memory.json          # Patch history
+    ├── agent_memory.json          # Active memory store (technique registry + analyses)
     ├── reports/                   # Task 1 paper reports
     ├── experiments/               # Per-experiment JSON records
     └── plots/                     # Training loss curves (PNG)
