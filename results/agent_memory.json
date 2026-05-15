@@ -89,13 +89,99 @@
       "relative_improvement": -0.061967,
       "future_candidate": false,
       "timestamp": "2026-05-13T15:11:34"
+    },
+    {
+      "patch_id": "claude",
+      "paper_id": "2603.13347v1",
+      "paper_title": "PolyGLU: State-Conditional Activation Routing in Transformer Feed-Forward Networks",
+      "result": "PASS",
+      "relative_improvement": 0.516369,
+      "future_candidate": true,
+      "timestamp": "2026-05-14T16:55:50"
     }
   ],
   "patch_stats": {
     "claude": {
-      "attempts": 10,
-      "passes": 1,
-      "avg_relative_improvement": -17.5993
+      "attempts": 11,
+      "passes": 2,
+      "avg_relative_improvement": -15.9524
     }
+  },
+  "technique_registry": {
+    "activation": {
+      "attempts": 2,
+      "passes": 1,
+      "best_ri": 0.040095,
+      "worst_ri": -0.061967,
+      "avg_ri": -0.010936,
+      "paper_ids": [
+        "2603.13347v1",
+        "2604.09709v1"
+      ]
+    },
+    "attention": {
+      "attempts": 1,
+      "passes": 0,
+      "best_ri": -0.221215,
+      "worst_ri": -0.221215,
+      "avg_ri": -0.221215,
+      "paper_ids": [
+        "2604.23862v1"
+      ]
+    },
+    "training_objective": {
+      "attempts": 1,
+      "passes": 0,
+      "best_ri": -0.099436,
+      "worst_ri": -0.099436,
+      "avg_ri": -0.099436,
+      "paper_ids": [
+        "2604.24957v1"
+      ]
+    },
+    "data_pipeline": {
+      "attempts": 1,
+      "passes": 0,
+      "best_ri": -175.334596,
+      "worst_ri": -175.334596,
+      "avg_ri": -175.334596,
+      "paper_ids": [
+        "2605.05227v1"
+      ]
+    },
+    "other": {
+      "attempts": 1,
+      "passes": 1,
+      "best_ri": 0.516369,
+      "worst_ri": 0.516369,
+      "avg_ri": 0.516369,
+      "paper_ids": [
+        "2603.13347v1"
+      ]
+    }
+  },
+  "memory_summary": {
+    "synthesis": "MiniMind experiments show overwhelmingly negative results across architectural and training modifications, with only 2 out of ~9 runs yielding positive outcomes (PolyGLU's +4.0% and +51.6%), suggesting the model is brittle to most interventions at this scale. Graph-based memory extensions (GMT) and quadratic complement mechanisms consistently degrade performance significantly, likely due to parameter overhead and optimization incompatibility with the 26M param regime. Data curation modifications are catastrophically dangerous (one run produced -17533.5%), indicating training stability is highly sensitive to data pipeline changes.",
+    "recommended_categories": [
+      "state-conditional gating mechanisms (PolyGLU-style, with careful tuning)",
+      "mixture-of-experts activation functions",
+      "lightweight conditional computation"
+    ],
+    "avoid_categories": [
+      "graph-based memory augmentation",
+      "orthogonal/quadratic complement projections",
+      "compute-aligned training objectives",
+      "data curation pipeline modifications",
+      "complex structural memory extensions"
+    ],
+    "avoid_patterns": [
+      "Replacing standard attention with graph neural network layers or adjacency-matrix-based memory modules",
+      "Introducing orthogonal projection heads or quadratic feature complements as auxiliary losses or activations",
+      "Modifying data sampling, filtering, or curriculum logic without extensive validation on held-out perplexity before full runs",
+      "Adding compute-budget regularization terms or FLOPs-aware scaling factors to the training loss"
+    ],
+    "generated_at": "2026-05-14T16:56:06",
+    "total_experiments": 11,
+    "pass_rate": 0.1818
   }
 }

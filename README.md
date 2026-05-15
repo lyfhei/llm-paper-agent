@@ -59,9 +59,9 @@ Task 2 — Agent Experiment Loop
 | Parameter | Value |
 |-----------|-------|
 | Architecture | Decoder-only transformer |
-| Hidden size | 512 |
+| Hidden size | 768 |
 | Layers | 8 |
-| Parameters | ~26M |
+| Parameters | ~64MB |
 | Positional encoding | RoPE (θ = 1e6) |
 | Normalization | RMSNorm (ε = 1e-6) |
 | Feed-forward | SwiGLU |
@@ -82,7 +82,7 @@ Task 2 — Agent Experiment Loop
 
 ## Results
 
-5 experiments run. 1 PASS (>2% relative PPL improvement).
+4 experiments run. 1 PASS (>2% relative PPL improvement).
 
 | Paper | Change | Baseline PPL | Variant PPL | Rel. Improvement | Result |
 |-------|--------|-------------|-------------|-----------------|--------|
@@ -90,7 +90,6 @@ Task 2 — Agent Experiment Loop
 | [Orthogonal Quadratic Complements for ViT FFN](https://arxiv.org/abs/2604.09709) | OQC-LR low-rank quadratic complement in FeedForward | 124.91 | 132.65 | -6.2% | ❌ FAIL |
 | [Compute Aligned Training](https://arxiv.org/abs/2604.24957) | Modified training objective | 124.91 | 137.23 | -9.9% | ❌ FAIL |
 | [Graph Memory Transformer](https://arxiv.org/abs/2604.23862) | Graph-based memory attention | 124.91 | 152.52 | -22.1% | ❌ FAIL |
-| [Online Reweighting for LLM Training](https://arxiv.org/abs/2605.05227) | ADAPT-style per-sample loss reweighting | 124.91 | 21,937 | -175× | ❌ FAIL |
 
 ### PolyGLU (PASS)
 

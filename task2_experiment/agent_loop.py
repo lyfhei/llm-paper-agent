@@ -74,11 +74,36 @@ YOUR RESPONSE FORMAT:
 - If you cannot implement, still output JSON with can_implement=false"""
 
 
+_FAILURE_ANALYSIS_SYSTEM = """You are a research engineer doing post-mortem analysis on a failed ML experiment on MiniMind (a 26M parameter Chinese LLM).
+
+Output a single JSON object with exactly these fields:
+- technique_category (str): one of: ffn, activation, attention, normalization, positional_encoding, data_pipeline, training_schedule, training_objective, other
+- what_failed (str): 1-2 sentences on the specific mechanism that caused failure
+- root_cause (str): 1-2 sentences on the fundamental reason (scale mismatch, misapplication, optimization instability, etc.)
+- avoid_pattern (str): a concrete pattern to avoid in future code changes (1 sentence, actionable)
+- transferable_lesson (str): 1 sentence of generalizable insight for future experiments
+
+Start immediately with { and output ONLY the JSON object."""
+
+_SUMMARY_SYSTEM = """You are a research engineer synthesizing ML experiment findings on MiniMind (26M param Chinese LLM).
+
+Output a single JSON object with:
+- synthesis (str): 2-3 sentences on what works, what fails, and why
+- recommended_categories (list of str): technique categories with positive signal
+- avoid_categories (list of str): technique categories with consistent negative results
+- avoid_patterns (list of str): 2-4 specific code patterns to avoid in future patches
+
+Start immediately with { and output ONLY the JSON object."""
+
+
 def claude_generate_patch(paper: Dict, model_code: str) -> Optional[Dict]:
     """Ask Claude to propose a specific code change based on the paper."""
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    user_msg = f"""Paper title: {paper.get('title', '')}
+    mem_context = memory.build_context_for_patch()
+    memory_block = f"{mem_context}\n\n" if mem_context else ""
+
+    user_msg = f"""{memory_block}Paper title: {paper.get('title', '')}
 Abstract: {paper.get('abstract', '')}
 
 Here is model_minimind.py (architecturally relevant parts):
@@ -186,6 +211,93 @@ def claude_interpret_result(paper: Dict, change: Dict, baseline_ppl: float,
         return r.content[0].text.strip()
     except Exception:
         return ""
+
+
+# ── Claude: failure analysis ──────────────────────────────────────────────────
+
+def claude_analyze_failure(paper: Dict, change: Dict, result: str, relative_improvement: float) -> Optional[Dict]:
+    """Post-mortem: ask Claude why this experiment failed and what to avoid."""
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    user_msg = (
+        f"Paper: {paper.get('title', '')}\n"
+        f"Abstract: {paper.get('abstract', '')[:500]}\n\n"
+        f"Change applied: {change.get('change_description', '')}\n\n"
+        f"Old code:\n```python\n{change.get('old_code', '')[:600]}\n```\n\n"
+        f"New code:\n```python\n{change.get('new_code', '')[:600]}\n```\n\n"
+        f"Result: {result}  |  Relative improvement: {relative_improvement:+.2%}\n\n"
+        "Analyze why this failed and what patterns to avoid in future experiments."
+    )
+    try:
+        r = client.messages.create(
+            model=CLAUDE_MODEL, max_tokens=600,
+            system=_FAILURE_ANALYSIS_SYSTEM,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = r.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        start, end = raw.find("{"), raw.rfind("}") + 1
+        if start == -1 or end <= start:
+            return None
+        return json.loads(raw[start:end])
+    except Exception as e:
+        print(f"[agent_loop] Failure analysis error: {e}")
+        return None
+
+
+def claude_generate_memory_summary() -> None:
+    """Ask Claude to synthesize all experiment history into a memory summary."""
+    data = memory._load()
+    history = data.get("patch_history", [])
+    if not history:
+        return
+
+    # Build compact history table for Claude
+    rows = []
+    seen = {}
+    for r in history:
+        pid = r.get("paper_id", "?")
+        title = r.get("paper_title", pid)[:40]
+        ri = r.get("relative_improvement", 0)
+        res = r.get("result", "?")
+        seen.setdefault(pid, {"title": title, "results": []})
+        seen[pid]["results"].append(f"{res} {ri:+.1%}")
+    for pid, v in seen.items():
+        rows.append(f"- {v['title']}: {', '.join(v['results'])}")
+
+    analyses = data.get("failure_analyses", [])
+    analysis_titles = [fa.get("paper_title", "")[:40] for fa in analyses]
+
+    user_msg = (
+        "Experiment history on MiniMind (26M param Chinese LLM):\n"
+        + "\n".join(rows)
+        + (f"\n\nFailure analyses available for: {', '.join(analysis_titles)}" if analysis_titles else "")
+        + "\n\nSynthesize findings into a strategic memory summary."
+    )
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    try:
+        r = client.messages.create(
+            model=CLAUDE_MODEL, max_tokens=400,
+            system=_SUMMARY_SYSTEM,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = r.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        start, end = raw.find("{"), raw.rfind("}") + 1
+        if start == -1 or end <= start:
+            return
+        summary = json.loads(raw[start:end])
+        memory.update_memory_summary(summary)
+        print(f"[agent_loop] Memory summary updated: {summary.get('synthesis', '')[:100]}")
+    except Exception as e:
+        print(f"[agent_loop] Memory summary error: {e}")
 
 
 # ── Load report ────────────────────────────────────────────────────────────────
@@ -339,6 +451,19 @@ def run_agent_loop(scored_papers: list, max_experiments: int = 3) -> None:
         }
         save_experiment(record)
         memory.update(record)
+
+        # 8. Failure analysis — store lessons for future experiments
+        if decision == "FAIL":
+            print("[agent_loop] Running failure analysis...")
+            analysis = claude_analyze_failure(paper, change, decision, relative_improvement)
+            if analysis:
+                memory.update_with_analysis(record, analysis)
+                print(f"[agent_loop] Root cause: {analysis.get('root_cause', '')[:100]}")
+
+    # Regenerate memory summary after all experiments
+    if experiment_count > 0:
+        print("[agent_loop] Updating memory summary...")
+        claude_generate_memory_summary()
 
     print("\n[agent_loop] === Summary ===")
     from task2_experiment.tracker import summary, save_report

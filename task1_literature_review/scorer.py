@@ -67,6 +67,12 @@ def score_papers(papers: List[Dict]) -> List[Dict]:
     candidates = _coarse_filter(papers, TOP_K_DEEP_SCORE)
     print(f"[scorer] Selected {len(candidates)} papers for deep scoring (balanced across goals)")
 
+    try:
+        from task2_experiment import memory as exp_memory
+        mem_context = exp_memory.build_context_for_scoring()
+    except ImportError:
+        mem_context = ""
+
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     scored = []
 
@@ -74,9 +80,11 @@ def score_papers(papers: List[Dict]) -> List[Dict]:
         goal = paper.get("source_goal", "?")
         print(f"[scorer] {i+1}/{len(candidates)} [{goal}] {paper['title'][:50]}...")
 
+        memory_suffix = f"\n\n{mem_context}" if mem_context else ""
         user_msg = (
             f"Improvement goal: {paper.get('goal_description', goal)}\n\n"
             f"Title: {paper['title']}\n\nAbstract: {paper['abstract']}"
+            f"{memory_suffix}"
         )
         try:
             response = client.messages.create(
