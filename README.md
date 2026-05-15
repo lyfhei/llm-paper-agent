@@ -10,26 +10,30 @@ An end-to-end agent pipeline that reads recent arXiv papers, uses Claude to gene
 Task 1 — Literature Review
   arXiv search (4 goals)
        ↓
-  Claude scores papers (novelty × practicality × applicability)
+  Load memory context (past experiment calibration per technique category)
+       ↓
+  Claude scores papers (novelty × practicality × applicability × memory-calibrated confidence)
        ↓
   Ranked report saved to results/reports/
 
 Task 2 — Agent Experiment Loop
   Read top-ranked papers
        ↓
-  Claude reads paper abstract + model source code
+  Load memory context (technique registry + failure analyses + synthesis)
        ↓
-  Claude outputs { old_code, new_code } patch
+  Claude reads paper + model source + memory → outputs { old_code, new_code } patch
        ↓
   Validate (exact match + ast.parse) → apply to model_minimind.py
        ↓
-  Train MiniMind variant (~26M params, 1 epoch, RTX 5070)
+  Train MiniMind variant (~64MB, 1 epoch, RTX 5070)
        ↓
   Evaluate perplexity → compare to frozen baseline
        ↓
   PASS if relative improvement > 2%  |  always revert patch
        ↓
-  Log result + Claude interpretation
+  FAIL → Claude post-mortem (what_failed / root_cause / avoid_pattern) → memory
+       ↓
+  Regenerate memory summary → ready for next experiment
 ```
 
 ---
